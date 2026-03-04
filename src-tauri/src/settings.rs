@@ -2,7 +2,6 @@ use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Mutex;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
@@ -70,28 +69,24 @@ impl Settings {
     }
 }
 
-pub type SettingsState = Mutex<Settings>;
-
 #[tauri::command]
-pub fn get_settings(state: tauri::State<'_, SettingsState>) -> Result<Settings, String> {
-    let settings = state.lock().map_err(|e| e.to_string())?;
-    Ok(settings.clone())
+pub async fn get_settings() -> Result<Settings, String> {
+    Ok(Settings::load())
 }
 
 #[tauri::command]
-pub fn update_settings(
-    new_settings: Settings,
-    state: tauri::State<'_, SettingsState>,
-) -> Result<(), String> {
-    let mut settings = state.lock().map_err(|e| e.to_string())?;
-    *settings = new_settings;
-    settings.save()
+pub async fn update_settings(new_settings: Settings) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || new_settings.save())
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-pub fn reset_settings(state: tauri::State<'_, SettingsState>) -> Result<Settings, String> {
-    let mut settings = state.lock().map_err(|e| e.to_string())?;
-    *settings = Settings::default();
-    settings.save()?;
-    Ok(settings.clone())
+pub async fn reset_settings() -> Result<Settings, String> {
+    let defaults = Settings::default();
+    let to_save = defaults.clone();
+    tokio::task::spawn_blocking(move || to_save.save())
+        .await
+        .map_err(|e| e.to_string())??;
+    Ok(defaults)
 }

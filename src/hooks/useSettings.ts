@@ -5,7 +5,6 @@ import type { Settings } from "../types";
 export function useSettings() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     invoke<Settings>("get_settings")
@@ -14,33 +13,26 @@ export function useSettings() {
       .finally(() => setLoading(false));
   }, []);
 
-  const save = useCallback(async (newSettings: Settings) => {
-    setSaving(true);
-    try {
-      await invoke("update_settings", { newSettings });
-      setSettings(newSettings);
-    } catch (e) {
-      console.error("Failed to save settings:", e);
-    } finally {
-      setSaving(false);
-    }
+  const save = useCallback((newSettings: Settings) => {
+    setSettings(newSettings);
+    // Fire and forget — don't await, don't block UI
+    invoke("update_settings", { newSettings }).catch((e) =>
+      console.error("Failed to save settings:", e)
+    );
   }, []);
 
   const reset = useCallback(async () => {
-    setSaving(true);
     try {
       const defaults = await invoke<Settings>("reset_settings");
       setSettings(defaults);
     } catch (e) {
       console.error("Failed to reset settings:", e);
-    } finally {
-      setSaving(false);
     }
   }, []);
 
-  const testNotification = useCallback(async () => {
-    await invoke("test_notification");
+  const testNotification = useCallback(() => {
+    invoke("test_notification").catch(console.error);
   }, []);
 
-  return { settings, loading, saving, save, reset, testNotification };
+  return { settings, loading, saving: false, save, reset, testNotification };
 }

@@ -2,7 +2,6 @@ mod focus;
 mod server;
 mod settings;
 
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU32, Ordering};
 use tauri::{
     menu::{Menu, MenuItem},
@@ -26,7 +25,7 @@ fn urlencoding(s: &str) -> String {
     result
 }
 
-use settings::{get_settings, reset_settings, update_settings, Settings, SettingsState};
+use settings::{get_settings, reset_settings, update_settings, Settings};
 
 static TOAST_COUNTER: AtomicU32 = AtomicU32::new(0);
 
@@ -44,7 +43,6 @@ pub fn show_toast_window(app: &tauri::AppHandle, title: &str, project: &str, mes
     let id = TOAST_COUNTER.fetch_add(1, Ordering::SeqCst);
     let label = format!("toast-{}", id);
 
-    // Encode data as URL query params so no timing issues
     let params = format!(
         "toast.html?title={}&project={}&message={}",
         urlencoding(title),
@@ -66,11 +64,10 @@ pub fn show_toast_window(app: &tauri::AppHandle, title: &str, project: &str, mes
     .skip_taskbar(true)
     .resizable(false)
     .focused(false)
-    .visible(false);  // Start hidden, show after positioning
+    .visible(false);
 
     match builder.build() {
         Ok(window) => {
-            // Position bottom-right, then show
             if let Ok(Some(monitor)) = window.primary_monitor() {
                 let size = monitor.size();
                 let scale = monitor.scale_factor();
@@ -89,16 +86,13 @@ pub fn show_toast_window(app: &tauri::AppHandle, title: &str, project: &str, mes
 pub fn run() {
     env_logger::init();
 
-    let settings = Settings::load();
-    let settings_state: SettingsState = Mutex::new(settings.clone());
-    let settings_arc = Arc::new(Mutex::new(settings));
+    let port = Settings::load().server_port;
 
     tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
-        .manage(settings_state)
         .invoke_handler(tauri::generate_handler![
             get_settings,
             update_settings,
@@ -107,24 +101,19 @@ pub fn run() {
             activate_terminal,
         ])
         .setup(move |app| {
-            // Build tray menu
             let settings_item = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
             let test_item = MenuItem::with_id(app, "test", "Test Notification", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
             let menu = Menu::with_items(app, &[&settings_item, &test_item, &quit_item])?;
 
-            // Build tray icon
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "settings" => {
-                        let app = app.clone();
-                        tauri::async_runtime::spawn(async move {
-                            open_settings_window(&app);
-                        });
+                        open_settings_window(app);
                     }
                     "test" => {
                         show_toast_window(app, "Claude Notify", "Test", "Everything is working!");
@@ -140,26 +129,28 @@ pub fn run() {
                         ..
                     } = event
                     {
-                        let app = tray.app_handle().clone();
-                        tauri::async_runtime::spawn(async move {
-                            open_settings_window(&app);
-                        });
+                        open_settings_window(tray.app_handle());
                     }
                 })
                 .build(app)?;
 
-            // Start HTTP server in background
             let app_handle = app.handle().clone();
-            let server_settings = settings_arc.clone();
             tauri::async_runtime::spawn(async move {
-                server::start_server(app_handle, server_settings).await;
+                server::start_server(app_handle, port).await;
             });
 
             log::info!("Claude Notify started");
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running Claude Notify");
+        .build(tauri::generate_context!())
+        .expect("error while building Claude Notify")
+        .run(|_app, event| {
+            // Prevent app from exiting when the last window (settings) closes.
+            // The tray icon keeps the app alive.
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                api.prevent_exit();
+            }
+        });
 }
 
 fn open_settings_window(app: &tauri::AppHandle) {

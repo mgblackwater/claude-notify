@@ -4,7 +4,7 @@ import { Toggle } from "./Toggle";
 import type { Settings as SettingsType } from "../types";
 
 export function Settings() {
-  const { settings, loading, saving, save, reset, testNotification } =
+  const { settings, loading, save, reset, testNotification } =
     useSettings();
 
   if (loading || !settings) {
@@ -136,11 +136,6 @@ export function Settings() {
         <Button onClick={reset}>Reset to Defaults</Button>
       </div>
 
-      {saving && (
-        <div style={{ fontSize: 12, color: "#8888aa", marginTop: 8 }}>
-          Saving...
-        </div>
-      )}
     </div>
   );
 }

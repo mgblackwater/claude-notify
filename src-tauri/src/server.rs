@@ -1,6 +1,5 @@
 use axum::{extract::State as AxumState, http::StatusCode, routing::{get, post}, Json, Router};
-use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
+use serde::Deserialize;
 use tauri::AppHandle;
 
 use crate::focus;
@@ -13,33 +12,15 @@ pub struct HookPayload {
     pub cwd: Option<String>,
     pub message: Option<String>,
     pub last_assistant_message: Option<String>,
-    pub session_id: Option<String>,
-}
-
-#[derive(Debug, Serialize, Clone)]
-pub struct NotificationEvent {
-    pub title: String,
-    pub project: String,
-    pub message: String,
-    pub hook_type: String,
 }
 
 #[derive(Clone)]
 pub struct ServerState {
     pub app_handle: AppHandle,
-    pub settings: Arc<Mutex<Settings>>,
 }
 
-pub async fn start_server(app_handle: AppHandle, settings: Arc<Mutex<Settings>>) {
-    let port = {
-        let s = settings.lock().unwrap();
-        s.server_port
-    };
-
-    let state = ServerState {
-        app_handle,
-        settings,
-    };
+pub async fn start_server(app_handle: AppHandle, port: u16) {
+    let state = ServerState { app_handle };
 
     let app = Router::new()
         .route("/health", get(health))
@@ -70,10 +51,8 @@ async fn notify(
     AxumState(state): AxumState<ServerState>,
     Json(payload): Json<HookPayload>,
 ) -> StatusCode {
-    let settings = match state.settings.lock() {
-        Ok(s) => s.clone(),
-        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR,
-    };
+    // Read settings from disk — no locks, no shared state
+    let settings = Settings::load();
 
     // Determine hook type
     let hook_type = payload.notification_type
@@ -87,7 +66,6 @@ async fn notify(
         "idle_prompt" => settings.hooks.idle_prompt,
         "Stop" => settings.hooks.stop,
         _ => {
-            // For Stop hook events, hook_event_name is "Stop"
             if payload.hook_event_name.as_deref() == Some("Stop") {
                 settings.hooks.stop
             } else {
@@ -138,15 +116,8 @@ async fn notify(
         })
         .unwrap_or_default();
 
-    let event = NotificationEvent {
-        title,
-        project,
-        message,
-        hook_type: hook_type.to_string(),
-    };
-
     // Show toast popup window
-    crate::show_toast_window(&state.app_handle, &event.title, &event.project, &event.message);
+    crate::show_toast_window(&state.app_handle, &title, &project, &message);
 
     StatusCode::OK
 }
