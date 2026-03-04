@@ -76,6 +76,13 @@ pub fn show_toast_window(app: &tauri::AppHandle, title: &str, project: &str, mes
                 let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(x, y)));
             }
             let _ = window.show();
+
+            // Rust-side auto-destroy after 6 seconds (failsafe if JS close fails)
+            let window_clone = window.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(6));
+                let _ = window_clone.destroy();
+            });
         }
         Err(e) => {
             log::error!("Failed to create toast window: {}", e);

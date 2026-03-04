@@ -76,23 +76,32 @@
       document.body.classList.add('visible');
     });
 
+    function closeToast() {
+      try {
+        if (window.__TAURI__) {
+          var win = window.__TAURI__.webviewWindow
+            ? window.__TAURI__.webviewWindow.getCurrentWebviewWindow()
+            : window.__TAURI__.window
+            ? window.__TAURI__.window.getCurrentWindow()
+            : null;
+          if (win) win.close();
+        }
+      } catch (e) { /* Rust-side timer will clean up */ }
+    }
+
     // Auto-close after 5 seconds
     setTimeout(() => {
       document.body.classList.remove('visible');
       document.body.classList.add('fading');
-      setTimeout(() => {
-        if (window.__TAURI__) {
-          window.__TAURI__.window.getCurrentWindow().close();
-        }
-      }, 400);
+      setTimeout(closeToast, 400);
     }, 5000);
 
     // Click to activate terminal and close
     document.body.addEventListener('click', () => {
-      if (window.__TAURI__) {
-        window.__TAURI__.core.invoke('activate_terminal');
-        window.__TAURI__.window.getCurrentWindow().close();
-      }
+      try {
+        if (window.__TAURI__) window.__TAURI__.core.invoke('activate_terminal');
+      } catch (e) {}
+      closeToast();
     });
   </script>
 </body>
