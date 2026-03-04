@@ -18,7 +18,52 @@ Get notified when Claude Code needs your attention — permission prompts, idle 
 
 ### From GitHub Releases
 
-Download the latest `.exe` installer from [Releases](../../releases) and run it. The installer creates a Start Menu shortcut so you can search "Claude Notify" with Win+S.
+Go to the [Releases](https://github.com/mgblackwater/claude-notify/releases) page and download the installer for your platform:
+
+| Platform | File | Notes |
+|----------|------|-------|
+| **Windows** | `Claude Notify_x.x.x_x64-setup.exe` | NSIS installer |
+| **macOS** | `Claude Notify_x.x.x_aarch64.dmg` | Drag to Applications |
+| **Linux** | `.deb` or `.AppImage` | Debian package or portable |
+
+#### Windows installer
+
+1. Run the `.exe` — an install wizard will open
+2. Choose install location (defaults to `AppData\Local\Claude Notify`)
+3. Select whether to create a desktop shortcut
+4. Click **Install** and wait for it to complete
+5. Search "Claude Notify" in the Start Menu (`Win+S`) to launch
+
+To update, download and run the latest installer — it replaces the previous version.
+
+To uninstall, go to **Settings → Apps → Claude Notify → Uninstall**.
+
+#### macOS installer
+
+1. Open the `.dmg` file
+2. Drag **Claude Notify** into the Applications folder
+3. Launch from Applications or Spotlight (`Cmd+Space`)
+
+#### Linux installer
+
+Debian/Ubuntu:
+```bash
+sudo dpkg -i claude-notify_x.x.x_amd64.deb
+```
+
+Or use the `.AppImage` directly:
+```bash
+chmod +x claude-notify_x.x.x_amd64.AppImage
+./claude-notify_x.x.x_amd64.AppImage
+```
+
+### From GitHub Actions (pre-release builds)
+
+Every push to `master` produces installers for all platforms:
+
+1. Go to the [Actions tab](https://github.com/mgblackwater/claude-notify/actions)
+2. Click the latest successful **Build & Release** workflow run
+3. Download the artifact for your platform: **windows-installer**, **macos-installer**, or **linux-installer**
 
 ### Build from Source
 
@@ -29,7 +74,7 @@ npm install
 npm run tauri build
 ```
 
-The installer will be in `src-tauri/target/release/bundle/nsis/`.
+Installers will be in `src-tauri/target/release/bundle/`.
 
 ## Setup
 
@@ -124,7 +169,7 @@ Right-click the tray icon → **Settings**, or left-click the tray icon.
 - **Tauri v2** — Rust backend + web frontend
 - **React 19** — Settings UI
 - **Axum** — Local HTTP server
-- **Win32 API** — Terminal focus detection (Windows)
+- **Platform-native focus detection** — Win32 (Windows), AppKit (macOS), X11 (Linux)
 
 ## License
 
