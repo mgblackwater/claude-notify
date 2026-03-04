@@ -66,6 +66,7 @@
     const title = params.get('title') || 'Claude Code';
     const project = params.get('project') || '';
     const message = params.get('message') || '';
+    const duration = parseInt(params.get('duration') || '5', 10) * 1000;
 
     document.getElementById('title').textContent = title;
     document.getElementById('project').textContent = project;
@@ -89,12 +90,12 @@
       } catch (e) { /* Rust-side timer will clean up */ }
     }
 
-    // Auto-close after 5 seconds
+    // Auto-close after configured duration
     setTimeout(() => {
       document.body.classList.remove('visible');
       document.body.classList.add('fading');
       setTimeout(closeToast, 400);
-    }, 5000);
+    }, duration);
 
     // Click to activate terminal and close
     document.body.addEventListener('click', () => {

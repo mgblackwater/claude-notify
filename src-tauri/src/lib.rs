@@ -31,7 +31,8 @@ static TOAST_COUNTER: AtomicU32 = AtomicU32::new(0);
 
 #[tauri::command]
 fn test_notification(app: tauri::AppHandle) {
-    show_toast_window(&app, "Claude Notify", "Test", "Everything is working!");
+    let duration = Settings::load().notification_duration;
+    show_toast_window(&app, "Claude Notify", "Test", "Everything is working!", duration);
 }
 
 #[tauri::command]
@@ -39,15 +40,16 @@ fn activate_terminal() {
     focus::activate_terminal_window();
 }
 
-pub fn show_toast_window(app: &tauri::AppHandle, title: &str, project: &str, message: &str) {
+pub fn show_toast_window(app: &tauri::AppHandle, title: &str, project: &str, message: &str, duration_secs: u32) {
     let id = TOAST_COUNTER.fetch_add(1, Ordering::SeqCst);
     let label = format!("toast-{}", id);
 
     let params = format!(
-        "toast.html?title={}&project={}&message={}",
+        "toast.html?title={}&project={}&message={}&duration={}",
         urlencoding(title),
         urlencoding(project),
         urlencoding(message),
+        duration_secs,
     );
 
     let mut builder = WebviewWindowBuilder::new(
@@ -81,10 +83,11 @@ pub fn show_toast_window(app: &tauri::AppHandle, title: &str, project: &str, mes
             }
             let _ = window.show();
 
-            // Rust-side auto-destroy after 6 seconds (failsafe if JS close fails)
+            // Rust-side auto-destroy (failsafe if JS close fails)
             let window_clone = window.clone();
+            let destroy_after = duration_secs as u64 + 2;
             std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_secs(6));
+                std::thread::sleep(std::time::Duration::from_secs(destroy_after));
                 let _ = window_clone.destroy();
             });
         }
@@ -127,7 +130,8 @@ pub fn run() {
                         open_settings_window(app);
                     }
                     "test" => {
-                        show_toast_window(app, "Claude Notify", "Test", "Everything is working!");
+                        let duration = Settings::load().notification_duration;
+                        show_toast_window(app, "Claude Notify", "Test", "Everything is working!", duration);
                     }
                     "quit" => {
                         app.exit(0);

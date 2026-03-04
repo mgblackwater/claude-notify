@@ -11,7 +11,9 @@ pub struct HookPayload {
     pub notification_type: Option<String>,
     pub cwd: Option<String>,
     pub message: Option<String>,
+    pub title: Option<String>,
     pub last_assistant_message: Option<String>,
+    pub tool_name: Option<String>,
 }
 
 #[derive(Clone)]
@@ -51,8 +53,9 @@ async fn notify(
     AxumState(state): AxumState<ServerState>,
     Json(payload): Json<HookPayload>,
 ) -> StatusCode {
-    // Read settings from disk — no locks, no shared state
     let settings = Settings::load();
+
+    let is_stop = payload.hook_event_name.as_deref() == Some("Stop");
 
     // Determine hook type
     let hook_type = payload.notification_type
@@ -65,13 +68,7 @@ async fn notify(
         "permission_prompt" => settings.hooks.permission_prompt,
         "idle_prompt" => settings.hooks.idle_prompt,
         "Stop" => settings.hooks.stop,
-        _ => {
-            if payload.hook_event_name.as_deref() == Some("Stop") {
-                settings.hooks.stop
-            } else {
-                true
-            }
-        }
+        _ => if is_stop { settings.hooks.stop } else { true },
     };
 
     if !enabled {
@@ -83,19 +80,15 @@ async fn notify(
         return StatusCode::OK;
     }
 
-    // Build notification
-    let title = match hook_type {
-        "permission_prompt" => "Permission needed".to_string(),
-        "idle_prompt" => "Waiting for your input".to_string(),
-        "Stop" => "Task completed".to_string(),
-        _ => {
-            if payload.hook_event_name.as_deref() == Some("Stop") {
-                "Task completed".to_string()
-            } else {
-                "Claude Code".to_string()
-            }
+    // Use title from Claude Code if provided, otherwise derive from hook type
+    let title = payload.title.clone().unwrap_or_else(|| {
+        match hook_type {
+            "permission_prompt" => "Permission needed".to_string(),
+            "idle_prompt" => "Waiting for your input".to_string(),
+            "Stop" | _ if is_stop => "Task completed".to_string(),
+            _ => "Claude Code".to_string(),
         }
-    };
+    });
 
     let project = payload.cwd
         .as_deref()
@@ -103,21 +96,38 @@ async fn notify(
         .unwrap_or("")
         .to_string();
 
-    let message = payload.message
-        .clone()
-        .or_else(|| {
-            payload.last_assistant_message.as_ref().map(|m| {
-                if m.len() > 200 {
-                    format!("{}...", &m[..200])
-                } else {
-                    m.clone()
-                }
-            })
-        })
-        .unwrap_or_default();
+    // Build message: use message field, then last_assistant_message, with tool context
+    let mut message = payload.message.clone().unwrap_or_default();
 
-    // Show toast popup window
-    crate::show_toast_window(&state.app_handle, &title, &project, &message);
+    // For permission prompts, include which tool needs permission
+    if hook_type == "permission_prompt" {
+        if let Some(tool) = &payload.tool_name {
+            if message.is_empty() {
+                message = format!("Allow {}?", tool);
+            }
+        }
+    }
+
+    // For stop events, show a summary of what Claude said
+    if message.is_empty() {
+        if let Some(last_msg) = &payload.last_assistant_message {
+            // Take first line or first 200 chars
+            let summary = last_msg.lines().next().unwrap_or(last_msg);
+            message = if summary.len() > 200 {
+                format!("{}...", &summary[..200])
+            } else {
+                summary.to_string()
+            };
+        }
+    }
+
+    crate::show_toast_window(
+        &state.app_handle,
+        &title,
+        &project,
+        &message,
+        settings.notification_duration,
+    );
 
     StatusCode::OK
 }
