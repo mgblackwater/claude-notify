@@ -3,8 +3,7 @@ name: Build & Release
 on:
   push:
     branches: [master]
-  release:
-    types: [created]
+    tags: ["v*"]
 
 jobs:
   build:
@@ -55,19 +54,26 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build Tauri app
+      - name: Build Tauri app (release)
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.event.release.tag_name || '' }}
-          releaseName: ${{ github.event.release.name || '' }}
-          releaseBody: ${{ github.event.release.body || '' }}
+          tagName: ${{ github.ref_name }}
+          releaseName: "Claude Notify ${{ github.ref_name }}"
+          releaseBody: "Download the installer for your platform below."
           releaseDraft: false
           prerelease: false
 
+      - name: Build Tauri app (CI)
+        if: "!startsWith(github.ref, 'refs/tags/v')"
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Upload installer artifacts
-        if: github.event_name == 'push'
+        if: "!startsWith(github.ref, 'refs/tags/v')"
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact-name }}
