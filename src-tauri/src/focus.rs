@@ -121,23 +121,25 @@ pub use win::{activate_terminal_window, is_terminal_focused};
 
 #[cfg(target_os = "macos")]
 pub fn is_terminal_focused() -> bool {
-    const TERMINAL_BUNDLE_IDS: &[&str] = &[
-        "com.apple.Terminal",
-        "com.googlecode.iterm2",
-        "org.alacritty",
-        "net.kovidgoyal.kitty",
-        "dev.warp.Warp-Stable",
-        "com.microsoft.VSCode",
-        "io.tabby",
-    ];
+    use std::process::Command;
+    // Use osascript to get frontmost app bundle ID — avoids objc2 API version issues
+    let output = Command::new("osascript")
+        .arg("-e")
+        .arg("tell application \"System Events\" to get bundle identifier of first process whose frontmost is true")
+        .output();
 
-    use objc2_app_kit::NSWorkspace;
-    let workspace = unsafe { NSWorkspace::sharedWorkspace() };
-    if let Some(app) = unsafe { workspace.frontmostApplication() } {
-        if let Some(bundle_id) = unsafe { app.bundleIdentifier() } {
-            let id = bundle_id.to_string();
-            return TERMINAL_BUNDLE_IDS.iter().any(|t| id == *t);
-        }
+    if let Ok(output) = output {
+        let bundle_id = String::from_utf8_lossy(&output.stdout).trim().to_lowercase();
+        const TERMINAL_BUNDLE_IDS: &[&str] = &[
+            "com.apple.terminal",
+            "com.googlecode.iterm2",
+            "org.alacritty",
+            "net.kovidgoyal.kitty",
+            "dev.warp.warp-stable",
+            "com.microsoft.vscode",
+            "io.tabby",
+        ];
+        return TERMINAL_BUNDLE_IDS.iter().any(|t| bundle_id.contains(t));
     }
     false
 }

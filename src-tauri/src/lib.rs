@@ -50,7 +50,7 @@ pub fn show_toast_window(app: &tauri::AppHandle, title: &str, project: &str, mes
         urlencoding(message),
     );
 
-    let builder = WebviewWindowBuilder::new(
+    let mut builder = WebviewWindowBuilder::new(
         app,
         &label,
         WebviewUrl::App(params.into()),
@@ -58,13 +58,17 @@ pub fn show_toast_window(app: &tauri::AppHandle, title: &str, project: &str, mes
     .title("")
     .inner_size(400.0, 160.0)
     .decorations(false)
-    .transparent(true)
     .shadow(false)
     .always_on_top(true)
     .skip_taskbar(true)
     .resizable(false)
     .focused(false)
     .visible(false);
+
+    #[cfg(target_os = "windows")]
+    {
+        builder = builder.transparent(true);
+    }
 
     match builder.build() {
         Ok(window) => {
