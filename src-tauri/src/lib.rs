@@ -1,4 +1,5 @@
 mod focus;
+mod hooks_setup;
 mod server;
 mod settings;
 
@@ -101,6 +102,9 @@ pub fn run() {
     env_logger::init();
 
     let port = Settings::load().server_port;
+
+    // Auto-configure Claude Code hooks on startup
+    hooks_setup::ensure_claude_hooks_configured(port);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_autostart::init(
