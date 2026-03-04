@@ -6,32 +6,36 @@ Get notified when Claude Code needs your attention — permission prompts, idle 
 
 ## Features
 
+- **System tray app** — runs quietly in the background with a tray icon
 - **Smart notifications** — only shows when your terminal is *not* focused
 - **Click to focus** — click the notification to switch back to your terminal
-- **Hook integration** — works with Claude Code's hook system (Notification, Stop events)
-- **Project context** — shows project name and the actual question/message
-- **Auto-dismiss** — fades out after 5 seconds
+- **Settings UI** — configure notifications, port, duration, and auto-start
+- **Per-hook toggles** — enable/disable notifications per event type (permission, idle, stop)
+- **HTTP API** — local server for Claude Code hook integration (no shell scripts needed)
+- **Auto-start** — optional launch on login
 
-## Current Status
+## Install
 
-**Windows scripts are working** (Git Bash / Windows Terminal). A cross-platform Tauri v2 app with system tray and settings UI is planned — see [Roadmap](#roadmap).
+### From GitHub Releases
 
-## Quick Start (Windows)
+Download the latest `.exe` installer from [Releases](../../releases) and run it. The installer creates a Start Menu shortcut so you can search "Claude Notify" with Win+S.
 
-### 1. Install scripts
+### Build from Source
+
+Requires [Node.js](https://nodejs.org/) and [Rust](https://rustup.rs/).
 
 ```bash
-# Copy scripts to ~/bin
-mkdir -p ~/bin
-cp scripts/windows/claude-notify.sh ~/bin/
-cp scripts/windows/claude-notify.ps1 ~/bin/
-chmod +x ~/bin/claude-notify.sh
-
-# Add ~/bin to PATH (add to ~/.bashrc)
-if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
-  export PATH="$HOME/bin:$PATH"
-fi
+npm install
+npm run tauri build
 ```
+
+The installer will be in `src-tauri/target/release/bundle/nsis/`.
+
+## Setup
+
+### 1. Start Claude Notify
+
+Launch from the Start Menu or run the installed executable. It starts minimized to the system tray.
 
 ### 2. Configure Claude Code hooks
 
@@ -42,20 +46,11 @@ Add to `~/.claude/settings.json`:
   "hooks": {
     "Notification": [
       {
-        "matcher": "permission_prompt",
+        "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "claude-notify.sh \"Permission needed\""
-          }
-        ]
-      },
-      {
-        "matcher": "idle_prompt",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "claude-notify.sh \"Waiting for your input\""
+            "command": "curl -s -X POST http://127.0.0.1:31311/notify -H \"Content-Type: application/json\" -d \"$CLAUDE_HOOK_EVENT_JSON\""
           }
         ]
       }
@@ -65,7 +60,7 @@ Add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "claude-notify.sh \"Task completed\""
+            "command": "curl -s -X POST http://127.0.0.1:31311/notify -H \"Content-Type: application/json\" -d \"{\\\"hook_event_name\\\":\\\"Stop\\\",\\\"cwd\\\":\\\"$(pwd)\\\"}\""
           }
         ]
       }
@@ -78,74 +73,58 @@ Add to `~/.claude/settings.json`:
 
 Restart your Claude Code session for the hooks to take effect.
 
-### 4. Test
-
-Switch to another app — notifications will appear when Claude Code needs attention.
-
-Manual test:
-
-```bash
-echo '{"cwd":"/your/project","message":"Test notification"}' | claude-notify.sh "Test"
-```
-
 ## How It Works
 
 1. Claude Code fires hook events (permission prompt, idle, stop)
-2. Hook calls `claude-notify.sh` with event JSON via stdin
-3. Script checks if your terminal window (Windows Terminal / mintty) is focused
-4. If **not focused** → shows a dark-themed WPF popup in the bottom-right corner
+2. Hook sends a POST request to `http://127.0.0.1:31311/notify`
+3. Claude Notify checks if your terminal window is focused
+4. If **not focused** → shows a dark-themed toast popup in the bottom-right corner
 5. If **focused** → notification is suppressed (you're already looking at it)
 6. Clicking the popup brings your terminal window to the foreground
 
-## Supported Terminals (Windows)
+## HTTP API
 
-- Windows Terminal
-- mintty (Git Bash standalone)
+### `GET /health`
+Returns `ok` — use to check if the app is running.
 
-## Roadmap
+### `POST /notify`
+Send a notification. Body (JSON):
 
-### v2 — Cross-Platform Tauri App
-
-A full desktop app built with **Tauri v2** (Rust + React) is planned:
-
-- **System tray** — runs as a background utility with tray icon
-- **Settings UI** — configure notification preferences from a settings window
-- **Per-hook toggles** — enable/disable notifications per event type
-- **Cross-platform** — Windows, macOS, Linux
-- **Focus detection** — platform-native (Win32, AppKit, X11/Wayland)
-- **Click-to-focus** — activate the correct terminal window
-- **Native notifications** — OS-native toast/notification center integration
-- **Auto-start** — optional launch on login
-- **Sound** — optional notification sound
-- **HTTP API** — local server for hook integration (no shell scripts needed)
-
-### Architecture (Planned)
-
-```
-claude-notify/
-├── src-tauri/                    # Rust backend
-│   ├── src/
-│   │   ├── main.rs              # Entry point
-│   │   ├── lib.rs               # App setup, tray, commands
-│   │   ├── server.rs            # Local HTTP server (axum)
-│   │   ├── notification.rs      # Notification logic
-│   │   ├── focus.rs             # Focus detection (platform-specific)
-│   │   └── settings.rs          # Settings management
-│   └── Cargo.toml
-├── src/                          # React frontend (settings UI)
-│   ├── App.tsx
-│   ├── components/
-│   │   ├── Settings.tsx
-│   │   └── HookToggle.tsx
-│   └── main.tsx
-├── scripts/                      # Current shell-based implementation
-│   └── windows/
-└── package.json
+```json
+{
+  "hook_event_name": "Notification",
+  "notification_type": "permission_prompt",
+  "cwd": "/path/to/project",
+  "message": "Claude needs permission to run a command"
+}
 ```
 
-## Contributing
+Fields:
+- `notification_type` — `permission_prompt`, `idle_prompt`, or omit for general
+- `hook_event_name` — `Stop` for task completion events
+- `cwd` — project directory (used to extract project name)
+- `message` — notification body text
 
-Contributions welcome! See the roadmap above for planned features.
+## Settings
+
+Right-click the tray icon → **Settings**, or left-click the tray icon.
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| Permission prompt | On | Notify on permission prompts |
+| Idle prompt | On | Notify when Claude is waiting for input |
+| Task completed | On | Notify when a task finishes |
+| Notification duration | 5s | How long the toast stays visible |
+| Suppress when focused | On | Skip notifications when terminal is focused |
+| Server port | 31311 | HTTP server port |
+| Auto-start | Off | Launch on login |
+
+## Tech Stack
+
+- **Tauri v2** — Rust backend + web frontend
+- **React 19** — Settings UI
+- **Axum** — Local HTTP server
+- **Win32 API** — Terminal focus detection (Windows)
 
 ## License
 
