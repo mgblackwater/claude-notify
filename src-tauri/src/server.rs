@@ -1,7 +1,7 @@
 use axum::{extract::State as AxumState, http::StatusCode, routing::{get, post}, Json, Router};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 
 use crate::focus;
 use crate::settings::Settings;
@@ -145,36 +145,8 @@ async fn notify(
         hook_type: hook_type.to_string(),
     };
 
-    // Emit to frontend (for potential in-app display)
-    let _ = state.app_handle.emit("notification", &event);
-
-    // Show native OS notification
-    show_notification(&state.app_handle, &event);
+    // Show toast popup window
+    crate::show_toast_window(&state.app_handle, &event.title, &event.project, &event.message);
 
     StatusCode::OK
-}
-
-fn show_notification(app: &AppHandle, event: &NotificationEvent) {
-    use tauri_plugin_notification::NotificationExt;
-
-    let mut body = String::new();
-    if !event.project.is_empty() {
-        body.push_str(&event.project);
-    }
-    if !event.message.is_empty() {
-        if !body.is_empty() {
-            body.push_str("\n");
-        }
-        body.push_str(&event.message);
-    }
-
-    if let Err(e) = app
-        .notification()
-        .builder()
-        .title(&event.title)
-        .body(&body)
-        .show()
-    {
-        log::error!("Failed to show notification: {}", e);
-    }
 }
