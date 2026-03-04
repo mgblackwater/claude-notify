@@ -149,71 +149,27 @@ pub fn activate_terminal_window() {}
 
 #[cfg(target_os = "linux")]
 pub fn is_terminal_focused() -> bool {
-    const TERMINAL_CLASSES: &[&str] = &[
-        "gnome-terminal",
-        "konsole",
-        "xterm",
-        "alacritty",
-        "kitty",
-        "terminator",
-        "tilix",
-        "xfce4-terminal",
-        "code",
-        "wezterm",
-    ];
+    use std::process::Command;
+    // Use xdotool to get active window class — avoids x11rb API version issues
+    let output = Command::new("xdotool")
+        .args(["getactivewindow", "getwindowclassname"])
+        .output();
 
-    if let Ok((conn, screen_num)) = x11rb::connect(None) {
-        let screen = &conn.setup().roots[screen_num];
-
-        if let Ok(atom_reply) =
-            x11rb::protocol::xproto::intern_atom(&conn, false, b"_NET_ACTIVE_WINDOW")
-        {
-            if let Ok(atom) = atom_reply.reply() {
-                if let Ok(prop) = x11rb::protocol::xproto::get_property(
-                    &conn,
-                    false,
-                    screen.root,
-                    atom.atom,
-                    x11rb::protocol::xproto::AtomEnum::WINDOW,
-                    0,
-                    1,
-                ) {
-                    if let Ok(prop_reply) = prop.reply() {
-                        if let Some(window_id) = prop_reply.value32().and_then(|mut v| v.next()) {
-                            if let Ok(class_atom) = x11rb::protocol::xproto::intern_atom(
-                                &conn,
-                                false,
-                                b"WM_CLASS",
-                            ) {
-                                if let Ok(class_atom_reply) = class_atom.reply() {
-                                    if let Ok(class_prop) =
-                                        x11rb::protocol::xproto::get_property(
-                                            &conn,
-                                            false,
-                                            window_id,
-                                            class_atom_reply.atom,
-                                            x11rb::protocol::xproto::AtomEnum::STRING,
-                                            0,
-                                            256,
-                                        )
-                                    {
-                                        if let Ok(class_reply) = class_prop.reply() {
-                                            let class_str = String::from_utf8_lossy(
-                                                &class_reply.value,
-                                            )
-                                            .to_lowercase();
-                                            return TERMINAL_CLASSES
-                                                .iter()
-                                                .any(|t| class_str.contains(t));
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    if let Ok(output) = output {
+        let class = String::from_utf8_lossy(&output.stdout).trim().to_lowercase();
+        const TERMINAL_CLASSES: &[&str] = &[
+            "gnome-terminal",
+            "konsole",
+            "xterm",
+            "alacritty",
+            "kitty",
+            "terminator",
+            "tilix",
+            "xfce4-terminal",
+            "code",
+            "wezterm",
+        ];
+        return TERMINAL_CLASSES.iter().any(|t| class.contains(t));
     }
     false
 }
