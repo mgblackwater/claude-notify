@@ -65,6 +65,48 @@ export function Settings() {
 
       {/* Behavior */}
       <Section title="Behavior">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "12px 0",
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 500 }}>
+              Notification duration
+            </div>
+            <div style={{ fontSize: 12, color: "#8888aa", marginTop: 2 }}>
+              How long the toast stays visible
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input
+              type="number"
+              min={1}
+              max={60}
+              value={settings.notification_duration}
+              onChange={(e) =>
+                update({
+                  notification_duration:
+                    Math.max(1, Math.min(60, parseInt(e.target.value) || 5)),
+                })
+              }
+              style={{
+                width: 56,
+                padding: "6px 10px",
+                borderRadius: 8,
+                border: "1px solid #3a3a5c",
+                background: "#1a1a2e",
+                color: "#d0d0e0",
+                fontSize: 14,
+                textAlign: "center",
+              }}
+            />
+            <span style={{ fontSize: 13, color: "#8888aa" }}>sec</span>
+          </div>
+        </div>
         <Toggle
           label="Suppress when focused"
           description="Don't notify when the terminal is in the foreground"
